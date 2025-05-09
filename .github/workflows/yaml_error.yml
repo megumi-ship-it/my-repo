@@ -1,0 +1,7 @@
+name: YAML error
+on: push
+jobs:
+  run:
+    runs-on: ubunts-latest
+      steps:
+      - run: echo "YAML Syntax Error"
