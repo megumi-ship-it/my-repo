@@ -1,0 +1,904 @@
+<!DOCTYPE html>
+<html lang="ja" class="h-full">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>スマホ家計簿 - Mobile Kakeibo</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- FontAwesome for Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Noto Sans JP', sans-serif;
+            -webkit-tap-highlight-color: transparent;
+            touch-action: manipulation;
+        }
+        /* Hide scrollbars for slick mobile UI */
+        .no-scrollbar::-webkit-scrollbar {
+            display: none;
+        }
+        .no-scrollbar {
+            -ms-overflow-style: none;
+            scrollbar-width: none;
+        }
+        /* Mobile safe-area padding for modern smartphones */
+        .pb-safe {
+            padding-bottom: env(safe-area-inset-bottom, 1rem);
+        }
+        .pt-safe {
+            padding-top: env(safe-area-inset-top, 0.5rem);
+        }
+        /* Slide drawer animation */
+        .drawer-up {
+            transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+    </style>
+</head>
+<body class="bg-slate-100 text-slate-900 h-full flex flex-col antialiased selection:bg-indigo-500 selection:text-white">
+
+    <!-- App Header -->
+    <header class="bg-indigo-600 text-white shadow-sm sticky top-0 z-30 pt-safe">
+        <div class="px-4 py-3 flex items-center justify-between">
+            <div class="flex items-center space-x-2">
+                <div class="w-9 h-9 bg-white/20 backdrop-blur-md rounded-xl flex items-center justify-center font-bold text-lg">
+                    <i class="fa-solid fa-wallet text-amber-300"></i>
+                </div>
+                <div>
+                    <h1 class="text-base font-bold leading-tight">スマホ家計簿</h1>
+                    <p class="text-[10px] text-indigo-200">マイ予算 & 支出管理</p>
+                </div>
+            </div>
+
+            <!-- Month/Year Quick Selector -->
+            <div class="flex items-center bg-indigo-700/60 backdrop-blur-sm px-2.5 py-1 rounded-xl border border-indigo-400/30">
+                <i class="fa-regular fa-calendar text-xs text-indigo-200 mr-1.5"></i>
+                <input type="month" id="globalMonthSelect" class="bg-transparent text-xs font-bold text-white focus:outline-none cursor-pointer">
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Content Area (Scrollable) -->
+    <main class="flex-1 overflow-y-auto no-scrollbar pb-24">
+        <div class="max-w-md mx-auto px-4 py-4 space-y-4">
+
+            <!-- Toast Notification -->
+            <div id="toast" class="fixed top-16 left-1/2 -translate-x-1/2 z-50 transform -translate-y-10 opacity-0 transition-all duration-300 bg-slate-900/95 backdrop-blur text-white px-4 py-2.5 rounded-full shadow-lg flex items-center gap-2 text-xs font-medium border border-slate-700">
+                <i id="toastIcon" class="fa-solid fa-circle-check text-emerald-400"></i>
+                <span id="toastMessage">保存しました</span>
+            </div>
+
+            <!-- ================= 1. DASHBOARD VIEW ================= -->
+            <section id="view-dashboard" class="space-y-4">
+                
+                <!-- Period Switcher (Monthly / Annual) -->
+                <div class="bg-white p-1.5 rounded-2xl shadow-sm border border-slate-200/80 flex text-xs font-bold">
+                    <button onclick="setDashboardMode('monthly')" id="modeMonthlyBtn" class="flex-1 py-2 rounded-xl bg-indigo-600 text-white shadow-sm transition">
+                        <i class="fa-solid fa-calendar-day mr-1"></i> 今月
+                    </button>
+                    <button onclick="setDashboardMode('annual')" id="modeAnnualBtn" class="flex-1 py-2 rounded-xl text-slate-500 hover:text-slate-800 transition">
+                        <i class="fa-solid fa-calendar mr-1"></i> 年間
+                    </button>
+                </div>
+
+                <!-- Summary Balance Card -->
+                <div class="bg-gradient-to-br from-indigo-600 via-indigo-700 to-indigo-900 text-white p-5 rounded-3xl shadow-md relative overflow-hidden">
+                    <div class="absolute -right-4 -bottom-4 opacity-10 text-9xl pointer-events-none">
+                        <i class="fa-solid fa-piggy-bank"></i>
+                    </div>
+                    <div class="flex justify-between items-start mb-2">
+                        <span class="text-xs font-medium text-indigo-200" id="summaryPeriodTitle">今月の残予算</span>
+                        <span id="overallBadge" class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-white/20 text-white backdrop-blur-sm">使用率 0%</span>
+                    </div>
+                    <div class="text-3xl font-extrabold tracking-tight mb-4" id="totalBalanceDisplay">
+                        ¥0
+                    </div>
+
+                    <!-- Compact Progress Bar inside Card -->
+                    <div class="space-y-1">
+                        <div class="w-full bg-indigo-950/40 h-2.5 rounded-full overflow-hidden p-0.5 border border-indigo-400/20">
+                            <div id="summaryProgressBar" class="bg-amber-400 h-full rounded-full transition-all duration-500" style="width: 0%"></div>
+                        </div>
+                        <div class="flex justify-between text-[11px] text-indigo-100 font-medium pt-1">
+                            <span>支出: <strong id="totalSpentDisplay" class="font-bold">¥0</strong></span>
+                            <span>予算: <strong id="totalBudgetDisplay" class="font-bold">¥0</strong></span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Chart Box -->
+                <div class="bg-white p-4 rounded-2xl shadow-sm border border-slate-200/80">
+                    <h3 class="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">カテゴリ別支出割合</h3>
+                    <div class="relative h-48 w-full flex items-center justify-center">
+                        <canvas id="expenseChart"></canvas>
+                    </div>
+                </div>
+
+                <!-- Category Progress Bars -->
+                <div class="bg-white p-4 rounded-2xl shadow-sm border border-slate-200/80">
+                    <div class="flex justify-between items-center mb-3">
+                        <h3 class="text-xs font-bold text-slate-500 uppercase tracking-wider">カテゴリ別 予算進捗</h3>
+                        <span class="text-[10px] text-slate-400">進捗度別アラート表示</span>
+                    </div>
+                    <div id="categoryProgressList" class="space-y-3">
+                        <!-- Dynamic list -->
+                    </div>
+                </div>
+
+            </section>
+
+            <!-- ================= 2. HISTORY VIEW ================= -->
+            <section id="view-history" class="hidden space-y-3">
+                <div class="bg-white p-3 rounded-2xl shadow-sm border border-slate-200/80 flex items-center gap-2">
+                    <select id="filterCategory" onchange="renderHistoryList()" class="bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-semibold text-slate-700 focus:outline-none flex-1">
+                        <option value="">すべてのカテゴリ</option>
+                    </select>
+                    <input type="text" id="filterSearch" oninput="renderHistoryList()" placeholder="メモ検索..." class="bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-700 focus:outline-none flex-1">
+                </div>
+
+                <!-- Expenses Timeline Card List -->
+                <div id="historyList" class="space-y-2">
+                    <!-- Dynamic history items -->
+                </div>
+
+                <div id="historyEmpty" class="hidden text-center py-12 text-slate-400">
+                    <i class="fa-regular fa-folder-open text-4xl mb-2 text-slate-300"></i>
+                    <p class="text-xs font-bold">支出データが見つかりません</p>
+                </div>
+            </section>
+
+            <!-- ================= 3. BUDGET & CATEGORY SETTINGS VIEW ================= -->
+            <section id="view-categories" class="hidden space-y-4">
+                <!-- Add/Edit Category Accordion/Box -->
+                <div class="bg-white p-4 rounded-2xl shadow-sm border border-slate-200/80">
+                    <h3 id="categoryFormHeading" class="text-sm font-bold text-slate-800 mb-3">新しいカテゴリの追加</h3>
+                    <form id="categoryForm" onsubmit="handleCategorySubmit(event)" class="space-y-3">
+                        <input type="hidden" id="editCategoryId">
+                        <div>
+                            <label class="block text-[11px] font-bold text-slate-500 mb-1">カテゴリ名</label>
+                            <input type="text" id="categoryName" required placeholder="例: 食費, 趣味" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-semibold focus:ring-2 focus:ring-indigo-500 focus:outline-none">
+                        </div>
+                        <div class="grid grid-cols-2 gap-2">
+                            <div>
+                                <label class="block text-[11px] font-bold text-slate-500 mb-1">月間予算 (円)</label>
+                                <input type="number" id="categoryMonthlyBudget" min="0" required placeholder="50000" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-semibold focus:ring-2 focus:ring-indigo-500 focus:outline-none">
+                            </div>
+                            <div>
+                                <label class="block text-[11px] font-bold text-slate-500 mb-1">年間予算 (円)</label>
+                                <input type="number" id="categoryAnnualBudget" min="0" required placeholder="600000" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-semibold focus:ring-2 focus:ring-indigo-500 focus:outline-none">
+                            </div>
+                        </div>
+                        <div>
+                            <label class="block text-[11px] font-bold text-slate-500 mb-1">テーマカラー</label>
+                            <input type="color" id="categoryColor" value="#4f46e5" class="w-full h-8 rounded-xl cursor-pointer p-0.5 border border-slate-200">
+                        </div>
+                        <div class="flex gap-2 pt-1">
+                            <button type="submit" id="categorySubmitBtn" class="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2.5 rounded-xl text-xs shadow-sm transition">
+                                <i class="fa-solid fa-plus mr-1"></i> 追加
+                            </button>
+                            <button type="button" id="categoryCancelBtn" onclick="resetCategoryForm()" class="hidden bg-slate-100 text-slate-600 font-bold px-4 py-2.5 rounded-xl text-xs">
+                                キャンセル
+                            </button>
+                        </div>
+                    </form>
+                </div>
+
+                <!-- Category List -->
+                <div class="bg-white p-4 rounded-2xl shadow-sm border border-slate-200/80">
+                    <h3 class="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3">カテゴリ・予算一覧</h3>
+                    <div id="categoryManageList" class="divide-y divide-slate-100">
+                        <!-- Dynamic categories -->
+                    </div>
+                </div>
+            </section>
+
+            <!-- ================= 4. DATA BACKUP VIEW ================= -->
+            <section id="view-settings" class="hidden space-y-4">
+                <div class="bg-white p-4 rounded-2xl shadow-sm border border-slate-200/80 space-y-4">
+                    <div>
+                        <h3 class="text-sm font-bold text-slate-800">データバックアップ & 復元</h3>
+                        <p class="text-xs text-slate-400">データのバックアップや機種変更時のデータ移行が可能です</p>
+                    </div>
+
+                    <!-- Export Buttons -->
+                    <div class="space-y-2">
+                        <button onclick="exportDataJSON()" class="w-full bg-slate-800 hover:bg-slate-900 text-white text-xs font-bold py-3 px-4 rounded-xl shadow-sm flex items-center justify-between transition">
+                            <span><i class="fa-solid fa-file-code mr-2 text-indigo-400"></i> JSONバックアップをダウンロード</span>
+                            <i class="fa-solid fa-download"></i>
+                        </button>
+                        <button onclick="exportExpensesCSV()" class="w-full bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold py-3 px-4 rounded-xl shadow-sm flex items-center justify-between transition">
+                            <span><i class="fa-solid fa-file-csv mr-2 text-emerald-200"></i> 支出履歴 (CSV) 出力</span>
+                            <i class="fa-solid fa-file-export"></i>
+                        </button>
+                    </div>
+
+                    <!-- Import Button -->
+                    <div class="pt-2 border-t border-slate-100">
+                        <label class="block text-xs font-bold text-slate-700 mb-1.5">JSONデータから復元</label>
+                        <input type="file" id="importFileInput" accept=".json" onchange="importDataJSON(event)" class="block w-full text-xs text-slate-500 file:mr-3 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-semibold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100">
+                    </div>
+                </div>
+            </section>
+
+        </div>
+    </main>
+
+    <!-- Floating Action Button for Adding Expense -->
+    <div class="fixed bottom-20 right-4 z-40 sm:hidden">
+        <button onclick="openExpenseDrawer()" class="w-14 h-14 bg-indigo-600 hover:bg-indigo-700 active:scale-95 text-white rounded-full shadow-lg flex items-center justify-center text-xl transition">
+            <i class="fa-solid fa-plus"></i>
+        </button>
+    </div>
+
+    <!-- Bottom Navigation Bar (Mobile Friendly) -->
+    <nav class="fixed bottom-0 left-0 right-0 bg-white border-t border-slate-200/80 z-30 pb-safe">
+        <div class="max-w-md mx-auto flex justify-around items-center h-16 px-2">
+            <button onclick="switchTab('dashboard')" id="nav-dashboard" class="nav-item flex-1 flex flex-col items-center justify-center text-indigo-600 font-bold transition">
+                <i class="fa-solid fa-chart-pie text-lg mb-0.5"></i>
+                <span class="text-[10px]">ホーム</span>
+            </button>
+            <button onclick="switchTab('history')" id="nav-history" class="nav-item flex-1 flex flex-col items-center justify-center text-slate-400 transition">
+                <i class="fa-solid fa-list-ul text-lg mb-0.5"></i>
+                <span class="text-[10px]">履歴</span>
+            </button>
+            <button onclick="openExpenseDrawer()" class="flex-1 flex flex-col items-center justify-center text-indigo-600 transition">
+                <div class="w-10 h-10 bg-indigo-600 text-white rounded-full flex items-center justify-center shadow-md -mt-4">
+                    <i class="fa-solid fa-plus text-base"></i>
+                </div>
+                <span class="text-[10px] text-indigo-600 font-bold mt-0.5">入力</span>
+            </button>
+            <button onclick="switchTab('categories')" id="nav-categories" class="nav-item flex-1 flex flex-col items-center justify-center text-slate-400 transition">
+                <i class="fa-solid fa-tags text-lg mb-0.5"></i>
+                <span class="text-[10px]">予算設定</span>
+            </button>
+            <button onclick="switchTab('settings')" id="nav-settings" class="nav-item flex-1 flex flex-col items-center justify-center text-slate-400 transition">
+                <i class="fa-solid fa-sliders text-lg mb-0.5"></i>
+                <span class="text-[10px]">管理</span>
+            </button>
+        </div>
+    </nav>
+
+    <!-- ================= EXPENSE INPUT DRAWER (SLIDE-UP MODAL) ================= -->
+    <div id="expenseDrawerOverlay" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 hidden opacity-0 transition-opacity duration-300" onclick="closeExpenseDrawer()"></div>
+    <div id="expenseDrawer" class="fixed bottom-0 left-0 right-0 max-w-md mx-auto bg-white rounded-t-3xl shadow-2xl z-50 transform translate-y-full drawer-up pb-safe">
+        <div class="p-4 space-y-4">
+            <!-- Header & Handle -->
+            <div class="flex justify-between items-center pb-2 border-b border-slate-100">
+                <div class="w-10 h-1 bg-slate-300 rounded-full mx-auto absolute left-1/2 -translate-x-1/2 top-2"></div>
+                <h3 id="drawerTitle" class="text-sm font-bold text-slate-800 pt-2">支出を記録</h3>
+                <button onclick="closeExpenseDrawer()" class="text-slate-400 p-1 text-lg">
+                    <i class="fa-solid fa-xmark"></i>
+                </button>
+            </div>
+
+            <!-- Expense Form Inside Drawer -->
+            <form id="drawerExpenseForm" onsubmit="handleExpenseSubmit(event)" class="space-y-3">
+                <input type="hidden" id="editExpenseId">
+
+                <!-- Amount Display Screen -->
+                <div class="bg-slate-50 p-3 rounded-2xl border border-slate-200 text-right">
+                    <span class="text-[10px] font-bold text-slate-400 block text-left">金額を入力 (円)</span>
+                    <div class="flex items-center justify-end text-3xl font-extrabold text-indigo-600">
+                        <span class="mr-1 text-xl">¥</span>
+                        <input type="number" id="expenseAmount" min="1" required placeholder="0" class="bg-transparent text-right w-full focus:outline-none font-extrabold">
+                    </div>
+                </div>
+
+                <!-- Input fields -->
+                <div class="grid grid-cols-2 gap-2">
+                    <div>
+                        <label class="block text-[10px] font-bold text-slate-500 mb-1">日付</label>
+                        <input type="date" id="expenseDate" required class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-semibold focus:outline-none">
+                    </div>
+                    <div>
+                        <label class="block text-[10px] font-bold text-slate-500 mb-1">カテゴリ</label>
+                        <select id="expenseCategory" required class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-semibold focus:outline-none">
+                            <!-- Populated dynamically -->
+                        </select>
+                    </div>
+                </div>
+
+                <div>
+                    <label class="block text-[10px] font-bold text-slate-500 mb-1">メモ (オプション)</label>
+                    <input type="text" id="expenseMemo" placeholder="例: スーパーで買物" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-semibold focus:outline-none">
+                </div>
+
+                <!-- Quick Keypad Helper (Common amounts) -->
+                <div class="flex gap-1.5 overflow-x-auto no-scrollbar py-1">
+                    <button type="button" onclick="addAmountQuick(100)" class="bg-slate-100 hover:bg-slate-200 text-slate-700 text-[11px] font-bold py-1 px-3 rounded-lg border border-slate-200">+100</button>
+                    <button type="button" onclick="addAmountQuick(500)" class="bg-slate-100 hover:bg-slate-200 text-slate-700 text-[11px] font-bold py-1 px-3 rounded-lg border border-slate-200">+500</button>
+                    <button type="button" onclick="addAmountQuick(1000)" class="bg-slate-100 hover:bg-slate-200 text-slate-700 text-[11px] font-bold py-1 px-3 rounded-lg border border-slate-200">+1000</button>
+                    <button type="button" onclick="clearAmountQuick()" class="bg-rose-50 text-rose-600 text-[11px] font-bold py-1 px-3 rounded-lg border border-rose-200">クリア</button>
+                </div>
+
+                <button type="submit" id="drawerSubmitBtn" class="w-full bg-indigo-600 active:bg-indigo-700 text-white font-bold py-3 rounded-2xl text-sm shadow-md transition flex items-center justify-center gap-2">
+                    <i class="fa-solid fa-check"></i> 保存する
+                </button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Confirm Modal -->
+    <div id="confirmModal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 hidden opacity-0 transition-opacity duration-200 flex items-center justify-center p-4">
+        <div id="confirmModalBox" class="bg-white w-full max-w-xs p-5 rounded-3xl shadow-xl transform scale-95 transition-transform duration-200 text-center space-y-3">
+            <div class="w-12 h-12 bg-rose-50 text-rose-500 rounded-2xl flex items-center justify-center text-xl mx-auto">
+                <i class="fa-solid fa-triangle-exclamation"></i>
+            </div>
+            <h3 id="confirmTitle" class="text-sm font-bold text-slate-800">削除の確認</h3>
+            <p id="confirmMessage" class="text-xs text-slate-500">このデータを削除してもよろしいですか？</p>
+            <div class="flex gap-2 pt-2">
+                <button onclick="closeConfirmModal(false)" class="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold py-2.5 rounded-xl text-xs">キャンセル</button>
+                <button id="confirmYesBtn" class="flex-1 bg-rose-600 hover:bg-rose-700 text-white font-bold py-2.5 rounded-xl text-xs shadow-sm">削除</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Application Script Logic -->
+    <script>
+        const DEFAULT_CATEGORIES = [
+            { id: 'cat_1', name: '食費', monthlyBudget: 50000, annualBudget: 600000, color: '#f59e0b' },
+            { id: 'cat_2', name: '日用品', monthlyBudget: 15000, annualBudget: 180000, color: '#10b981' },
+            { id: 'cat_3', name: '固定費', monthlyBudget: 80000, annualBudget: 960000, color: '#6366f1' },
+            { id: 'cat_4', name: '娯楽・交際費', monthlyBudget: 25000, annualBudget: 300000, color: '#ec4899' },
+            { id: 'cat_5', name: '交通費', monthlyBudget: 10000, annualBudget: 120000, color: '#06b6d4' },
+            { id: 'cat_6', name: 'その他', monthlyBudget: 10000, annualBudget: 120000, color: '#64748b' }
+        ];
+
+        let categories = JSON.parse(localStorage.getItem('kakeibo_mobile_categories')) || DEFAULT_CATEGORIES;
+        let expenses = JSON.parse(localStorage.getItem('kakeibo_mobile_expenses')) || [];
+
+        let dashboardMode = 'monthly'; // 'monthly' | 'annual'
+        let currentTab = 'dashboard';
+        let expenseChartInstance = null;
+        let confirmCallback = null;
+
+        window.onload = function() {
+            // Set current month filter
+            const now = new Date();
+            const year = now.getFullYear();
+            const month = String(now.getMonth() + 1).padStart(2, '0');
+            const monthInput = document.getElementById('globalMonthSelect');
+            monthInput.value = `${year}-${month}`;
+            monthInput.addEventListener('change', () => updateDashboard());
+
+            // Default date field to today
+            document.getElementById('expenseDate').value = now.toISOString().split('T')[0];
+
+            updateCategoryDropdowns();
+            renderCategoryManageList();
+            renderHistoryList();
+            updateDashboard();
+        };
+
+        function saveData() {
+            localStorage.setItem('kakeibo_mobile_categories', JSON.stringify(categories));
+            localStorage.setItem('kakeibo_mobile_expenses', JSON.stringify(expenses));
+        }
+
+        function showToast(message, isError = false) {
+            const toast = document.getElementById('toast');
+            const msgEl = document.getElementById('toastMessage');
+            const iconEl = document.getElementById('toastIcon');
+
+            msgEl.textContent = message;
+            iconEl.className = isError ? 'fa-solid fa-circle-exclamation text-rose-400' : 'fa-solid fa-circle-check text-emerald-400';
+
+            toast.classList.remove('-translate-y-10', 'opacity-0');
+            setTimeout(() => toast.classList.add('-translate-y-10', 'opacity-0'), 2500);
+        }
+
+        // Navigation
+        function switchTab(tabId) {
+            currentTab = tabId;
+            ['dashboard', 'history', 'categories', 'settings'].forEach(t => {
+                const navBtn = document.getElementById(`nav-${t}`);
+                const viewEl = document.getElementById(`view-${t}`);
+                if (t === tabId) {
+                    if(navBtn) navBtn.className = 'nav-item flex-1 flex flex-col items-center justify-center text-indigo-600 font-bold transition';
+                    if(viewEl) viewEl.classList.remove('hidden');
+                } else {
+                    if(navBtn) navBtn.className = 'nav-item flex-1 flex flex-col items-center justify-center text-slate-400 transition';
+                    if(viewEl) viewEl.classList.add('hidden');
+                }
+            });
+
+            if (tabId === 'dashboard') updateDashboard();
+            if (tabId === 'history') renderHistoryList();
+            if (tabId === 'categories') renderCategoryManageList();
+        }
+
+        function setDashboardMode(mode) {
+            dashboardMode = mode;
+            const mBtn = document.getElementById('modeMonthlyBtn');
+            const aBtn = document.getElementById('modeAnnualBtn');
+
+            if (mode === 'monthly') {
+                mBtn.className = 'flex-1 py-2 rounded-xl bg-indigo-600 text-white shadow-sm transition';
+                aBtn.className = 'flex-1 py-2 rounded-xl text-slate-500 hover:text-slate-800 transition';
+            } else {
+                aBtn.className = 'flex-1 py-2 rounded-xl bg-indigo-600 text-white shadow-sm transition';
+                mBtn.className = 'flex-1 py-2 rounded-xl text-slate-500 hover:text-slate-800 transition';
+            }
+            updateDashboard();
+        }
+
+        function formatCurrency(num) {
+            return '¥' + Number(num).toLocaleString();
+        }
+
+        // Dashboard calculation & rendering
+        function updateDashboard() {
+            const selectedMonthStr = document.getElementById('globalMonthSelect').value;
+            const [selYear, selMonth] = selectedMonthStr ? selectedMonthStr.split('-') : [new Date().getFullYear(), '01'];
+
+            let filteredExpenses = [];
+            let totalBudget = 0;
+
+            if (dashboardMode === 'monthly') {
+                document.getElementById('summaryPeriodTitle').textContent = `${selYear}年${Number(selMonth)}月の残予算`;
+                categories.forEach(c => totalBudget += Number(c.monthlyBudget));
+                filteredExpenses = expenses.filter(e => e.date.startsWith(selectedMonthStr));
+            } else {
+                document.getElementById('summaryPeriodTitle').textContent = `${selYear}年の残予算`;
+                categories.forEach(c => totalBudget += Number(c.annualBudget));
+                filteredExpenses = expenses.filter(e => e.date.startsWith(selYear));
+            }
+
+            const totalSpent = filteredExpenses.reduce((sum, e) => sum + Number(e.amount), 0);
+            const balance = totalBudget - totalSpent;
+
+            document.getElementById('totalBudgetDisplay').textContent = formatCurrency(totalBudget);
+            document.getElementById('totalSpentDisplay').textContent = formatCurrency(totalSpent);
+            document.getElementById('totalBalanceDisplay').textContent = formatCurrency(balance);
+
+            const pct = totalBudget > 0 ? Math.round((totalSpent / totalBudget) * 100) : 0;
+            const badge = document.getElementById('overallBadge');
+            badge.textContent = `使用率 ${pct}%`;
+            
+            const pBar = document.getElementById('summaryProgressBar');
+            pBar.style.width = `${Math.min(pct, 100)}%`;
+
+            if (pct >= 100) {
+                pBar.className = 'bg-rose-500 h-full rounded-full transition-all duration-500';
+                badge.className = 'text-[10px] font-bold px-2 py-0.5 rounded-full bg-rose-500/80 text-white backdrop-blur-sm';
+            } else if (pct >= 80) {
+                pBar.className = 'bg-amber-400 h-full rounded-full transition-all duration-500';
+                badge.className = 'text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-500/80 text-white backdrop-blur-sm';
+            } else {
+                pBar.className = 'bg-emerald-400 h-full rounded-full transition-all duration-500';
+                badge.className = 'text-[10px] font-bold px-2 py-0.5 rounded-full bg-white/20 text-white backdrop-blur-sm';
+            }
+
+            renderCategoryProgressBars(filteredExpenses, dashboardMode);
+            renderChart(filteredExpenses);
+        }
+
+        function renderCategoryProgressBars(filteredExpenses, mode) {
+            const container = document.getElementById('categoryProgressList');
+            container.innerHTML = '';
+
+            if (categories.length === 0) {
+                container.innerHTML = '<p class="text-xs text-slate-400 text-center py-4">カテゴリがありません</p>';
+                return;
+            }
+
+            categories.forEach(cat => {
+                const catSpent = filteredExpenses.filter(e => e.categoryId === cat.id).reduce((sum, e) => sum + Number(e.amount), 0);
+                const budget = mode === 'monthly' ? Number(cat.monthlyBudget) : Number(cat.annualBudget);
+                const pct = budget > 0 ? Math.round((catSpent / budget) * 100) : 0;
+
+                let statusBadge = `<span class="text-[10px] font-bold text-slate-400">${pct}%</span>`;
+                let barColor = 'bg-indigo-600';
+                if (pct >= 100) {
+                    statusBadge = `<span class="text-[10px] font-bold px-1.5 py-0.5 rounded bg-rose-100 text-rose-600">予算超過 (${pct}%)</span>`;
+                    barColor = 'bg-rose-500';
+                } else if (pct >= 80) {
+                    statusBadge = `<span class="text-[10px] font-bold px-1.5 py-0.5 rounded bg-amber-100 text-amber-700">注意 (${pct}%)</span>`;
+                    barColor = 'bg-amber-500';
+                }
+
+                const item = `
+                    <div class="space-y-1">
+                        <div class="flex justify-between items-center text-xs">
+                            <span class="font-bold text-slate-700 flex items-center gap-1.5">
+                                <span class="w-2.5 h-2.5 rounded-full" style="background-color: ${cat.color || '#4f46e5'}"></span>
+                                ${cat.name}
+                            </span>
+                            <div class="flex items-center gap-2">
+                                <span class="text-[11px] font-semibold text-slate-500">${formatCurrency(catSpent)} / ${formatCurrency(budget)}</span>
+                                ${statusBadge}
+                            </div>
+                        </div>
+                        <div class="w-full bg-slate-100 h-2 rounded-full overflow-hidden">
+                            <div class="${barColor} h-full rounded-full transition-all duration-300" style="width: ${Math.min(pct, 100)}%"></div>
+                        </div>
+                    </div>
+                `;
+                container.insertAdjacentHTML('beforeend', item);
+            });
+        }
+
+        function renderChart(filteredExpenses) {
+            const ctx = document.getElementById('expenseChart').getContext('2d');
+            const catTotals = {};
+            categories.forEach(c => catTotals[c.id] = { name: c.name, total: 0, color: c.color || '#4f46e5' });
+
+            filteredExpenses.forEach(e => {
+                if (catTotals[e.categoryId]) catTotals[e.categoryId].total += Number(e.amount);
+            });
+
+            const labels = [];
+            const data = [];
+            const colors = [];
+
+            Object.values(catTotals).forEach(item => {
+                if (item.total > 0) {
+                    labels.push(item.name);
+                    data.push(item.total);
+                    colors.push(item.color);
+                }
+            });
+
+            if (expenseChartInstance) expenseChartInstance.destroy();
+
+            if (data.length === 0) {
+                labels.push('データなし');
+                data.push(1);
+                colors.push('#e2e8f0');
+            }
+
+            expenseChartInstance = new Chart(ctx, {
+                type: 'doughnut',
+                data: {
+                    labels,
+                    datasets: [{ data, backgroundColor: colors, borderWidth: 2, borderColor: '#ffffff' }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { position: 'bottom', labels: { boxWidth: 10, font: { size: 10 } } }
+                    },
+                    cutout: '70%'
+                }
+            });
+        }
+
+        // Expense Input Drawer Actions
+        function openExpenseDrawer(editId = null) {
+            const overlay = document.getElementById('expenseDrawerOverlay');
+            const drawer = document.getElementById('expenseDrawer');
+            
+            if (editId) {
+                const exp = expenses.find(e => e.id === editId);
+                if (exp) {
+                    document.getElementById('editExpenseId').value = exp.id;
+                    document.getElementById('expenseAmount').value = exp.amount;
+                    document.getElementById('expenseDate').value = exp.date;
+                    document.getElementById('expenseCategory').value = exp.categoryId;
+                    document.getElementById('expenseMemo').value = exp.memo || '';
+                    document.getElementById('drawerTitle').textContent = '支出を編集';
+                }
+            } else {
+                document.getElementById('drawerExpenseForm').reset();
+                document.getElementById('editExpenseId').value = '';
+                document.getElementById('expenseDate').value = new Date().toISOString().split('T')[0];
+                document.getElementById('drawerTitle').textContent = '支出を記録';
+            }
+
+            overlay.classList.remove('hidden');
+            drawer.classList.remove('translate-y-full');
+            setTimeout(() => overlay.classList.remove('opacity-0'), 10);
+        }
+
+        function closeExpenseDrawer() {
+            const overlay = document.getElementById('expenseDrawerOverlay');
+            const drawer = document.getElementById('expenseDrawer');
+
+            overlay.classList.add('opacity-0');
+            drawer.classList.add('translate-y-full');
+            setTimeout(() => overlay.classList.add('hidden'), 300);
+        }
+
+        function addAmountQuick(val) {
+            const amountInput = document.getElementById('expenseAmount');
+            const current = Number(amountInput.value) || 0;
+            amountInput.value = current + val;
+        }
+
+        function clearAmountQuick() {
+            document.getElementById('expenseAmount').value = '';
+        }
+
+        function handleExpenseSubmit(event) {
+            event.preventDefault();
+
+            const editId = document.getElementById('editExpenseId').value;
+            const amount = Number(document.getElementById('expenseAmount').value);
+            const date = document.getElementById('expenseDate').value;
+            const categoryId = document.getElementById('expenseCategory').value;
+            const memo = document.getElementById('expenseMemo').value.trim();
+
+            if (!amount || !date || !categoryId) {
+                showToast('必須項目を入力してください', true);
+                return;
+            }
+
+            if (editId) {
+                const idx = expenses.findIndex(e => e.id === editId);
+                if (idx !== -1) expenses[idx] = { id: editId, amount, date, categoryId, memo };
+                showToast('更新しました');
+            } else {
+                expenses.unshift({ id: 'exp_' + Date.now(), amount, date, categoryId, memo });
+                showToast('記録しました');
+            }
+
+            saveData();
+            closeExpenseDrawer();
+            updateDashboard();
+            if (currentTab === 'history') renderHistoryList();
+        }
+
+        function updateCategoryDropdowns() {
+            const selectEl = document.getElementById('expenseCategory');
+            const filterEl = document.getElementById('filterCategory');
+
+            selectEl.innerHTML = '';
+            filterEl.innerHTML = '<option value="">すべてのカテゴリ</option>';
+
+            categories.forEach(cat => {
+                const opt = new Option(cat.name, cat.id);
+                selectEl.add(opt);
+
+                const fOpt = new Option(cat.name, cat.id);
+                filterEl.add(fOpt);
+            });
+        }
+
+        // History Render
+        function renderHistoryList() {
+            const container = document.getElementById('historyList');
+            const emptyEl = document.getElementById('historyEmpty');
+            const filterCat = document.getElementById('filterCategory').value;
+            const filterSearch = document.getElementById('filterSearch').value.toLowerCase();
+
+            container.innerHTML = '';
+
+            let filtered = expenses.filter(e => {
+                const matchCat = !filterCat || e.categoryId === filterCat;
+                const matchSearch = !filterSearch || (e.memo && e.memo.toLowerCase().includes(filterSearch));
+                return matchCat && matchSearch;
+            });
+
+            filtered.sort((a, b) => new Date(b.date) - new Date(a.date));
+
+            if (filtered.length === 0) {
+                emptyEl.classList.remove('hidden');
+                return;
+            } else {
+                emptyEl.classList.add('hidden');
+            }
+
+            filtered.forEach(e => {
+                const cat = categories.find(c => c.id === e.categoryId) || { name: '未分類', color: '#64748b' };
+                const item = `
+                    <div class="bg-white p-3.5 rounded-2xl shadow-sm border border-slate-200/80 flex items-center justify-between">
+                        <div class="flex items-center space-x-3">
+                            <div class="w-9 h-9 rounded-xl flex items-center justify-center text-xs font-bold" style="background-color: ${cat.color}20; color: ${cat.color}">
+                                <i class="fa-solid fa-receipt"></i>
+                            </div>
+                            <div>
+                                <div class="flex items-center gap-1.5">
+                                    <span class="text-xs font-bold text-slate-800">${cat.name}</span>
+                                    <span class="text-[10px] text-slate-400">${e.date}</span>
+                                </div>
+                                <p class="text-[11px] text-slate-500 truncate max-w-[150px]">${e.memo || '-'}</p>
+                            </div>
+                        </div>
+                        <div class="flex items-center space-x-3">
+                            <span class="text-sm font-extrabold text-slate-900">${formatCurrency(e.amount)}</span>
+                            <div class="flex items-center space-x-1">
+                                <button onclick="openExpenseDrawer('${e.id}')" class="text-slate-400 hover:text-indigo-600 p-1.5 text-xs">
+                                    <i class="fa-solid fa-pen"></i>
+                                </button>
+                                <button onclick="confirmDeleteExpense('${e.id}')" class="text-slate-400 hover:text-rose-600 p-1.5 text-xs">
+                                    <i class="fa-solid fa-trash"></i>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                `;
+                container.insertAdjacentHTML('beforeend', item);
+            });
+        }
+
+        function confirmDeleteExpense(id) {
+            showConfirmModal('支出の削除', 'この支出データを削除してもよろしいですか？', () => {
+                expenses = expenses.filter(e => e.id !== id);
+                saveData();
+                renderHistoryList();
+                updateDashboard();
+                showToast('削除しました');
+            });
+        }
+
+        // Category Management
+        function handleCategorySubmit(event) {
+            event.preventDefault();
+            const editId = document.getElementById('editCategoryId').value;
+            const name = document.getElementById('categoryName').value.trim();
+            const monthlyBudget = Number(document.getElementById('categoryMonthlyBudget').value);
+            const annualBudget = Number(document.getElementById('categoryAnnualBudget').value);
+            const color = document.getElementById('categoryColor').value;
+
+            if (editId) {
+                const idx = categories.findIndex(c => c.id === editId);
+                if (idx !== -1) categories[idx] = { id: editId, name, monthlyBudget, annualBudget, color };
+                showToast('カテゴリを更新しました');
+            } else {
+                categories.push({ id: 'cat_' + Date.now(), name, monthlyBudget, annualBudget, color });
+                showToast('カテゴリを追加しました');
+            }
+
+            saveData();
+            resetCategoryForm();
+            renderCategoryManageList();
+            updateCategoryDropdowns();
+            updateDashboard();
+        }
+
+        function resetCategoryForm() {
+            document.getElementById('categoryForm').reset();
+            document.getElementById('editCategoryId').value = '';
+            document.getElementById('categoryFormHeading').textContent = '新しいカテゴリの追加';
+            document.getElementById('categorySubmitBtn').innerHTML = '<i class="fa-solid fa-plus mr-1"></i> 追加';
+            document.getElementById('categoryCancelBtn').classList.add('hidden');
+        }
+
+        function editCategory(id) {
+            const cat = categories.find(c => c.id === id);
+            if (!cat) return;
+            document.getElementById('editCategoryId').value = cat.id;
+            document.getElementById('categoryName').value = cat.name;
+            document.getElementById('categoryMonthlyBudget').value = cat.monthlyBudget;
+            document.getElementById('categoryAnnualBudget').value = cat.annualBudget;
+            document.getElementById('categoryColor').value = cat.color || '#4f46e5';
+
+            document.getElementById('categoryFormHeading').textContent = 'カテゴリの編集';
+            document.getElementById('categorySubmitBtn').innerHTML = '<i class="fa-solid fa-check mr-1"></i> 更新';
+            document.getElementById('categoryCancelBtn').classList.remove('hidden');
+        }
+
+        function confirmDeleteCategory(id) {
+            showConfirmModal('カテゴリ削除', 'このカテゴリを削除しますか？', () => {
+                categories = categories.filter(c => c.id !== id);
+                saveData();
+                renderCategoryManageList();
+                updateCategoryDropdowns();
+                updateDashboard();
+                showToast('カテゴリを削除しました');
+            });
+        }
+
+        function renderCategoryManageList() {
+            const container = document.getElementById('categoryManageList');
+            container.innerHTML = '';
+
+            categories.forEach(cat => {
+                const item = `
+                    <div class="py-3 flex items-center justify-between">
+                        <div class="flex items-center space-x-2.5">
+                            <span class="w-3 h-3 rounded-full" style="background-color: ${cat.color || '#4f46e5'}"></span>
+                            <div>
+                                <span class="text-xs font-bold text-slate-800">${cat.name}</span>
+                                <div class="text-[10px] text-slate-400">月予算: ${formatCurrency(cat.monthlyBudget)} / 年予算: ${formatCurrency(cat.annualBudget)}</div>
+                            </div>
+                        </div>
+                        <div class="flex space-x-1">
+                            <button onclick="editCategory('${cat.id}')" class="text-slate-400 hover:text-indigo-600 p-1 text-xs">
+                                <i class="fa-solid fa-pen"></i>
+                            </button>
+                            <button onclick="confirmDeleteCategory('${cat.id}')" class="text-slate-400 hover:text-rose-600 p-1 text-xs">
+                                <i class="fa-solid fa-trash"></i>
+                            </button>
+                        </div>
+                    </div>
+                `;
+                container.insertAdjacentHTML('beforeend', item);
+            });
+        }
+
+        // Export / Import Functions
+        function exportDataJSON() {
+            const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify({ categories, expenses }, null, 2));
+            const dlAnchorElem = document.createElement('a');
+            dlAnchorElem.setAttribute("href", dataStr);
+            dlAnchorElem.setAttribute("download", `kakeibo_backup_${new Date().toISOString().split('T')[0]}.json`);
+            dlAnchorElem.click();
+            showToast('JSONデータをエクスポートしました');
+        }
+
+        function exportExpensesCSV() {
+            if (expenses.length === 0) {
+                showToast('エクスポートするデータがありません', true);
+                return;
+            }
+            let csvContent = "data:text/csv;charset=utf-8,\uFEFF日付,カテゴリ,金額,メモ\n";
+            expenses.forEach(e => {
+                const cat = categories.find(c => c.id === e.categoryId) || { name: '未分類' };
+                const memoClean = (e.memo || '').replace(/"/g, '""');
+                csvContent += `"${e.date}","${cat.name}",${e.amount},"${memoClean}"\n`;
+            });
+            const encodedUri = encodeURI(csvContent);
+            const link = document.createElement("a");
+            link.setAttribute("href", encodedUri);
+            link.setAttribute("download", `expenses_${new Date().toISOString().split('T')[0]}.csv`);
+            link.click();
+            showToast('CSVを出力しました');
+        }
+
+        function importDataJSON(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                try {
+                    const parsed = JSON.parse(e.target.result);
+                    if (parsed.categories && parsed.expenses) {
+                        categories = parsed.categories;
+                        expenses = parsed.expenses;
+                        saveData();
+                        updateCategoryDropdowns();
+                        renderCategoryManageList();
+                        renderHistoryList();
+                        updateDashboard();
+                        showToast('データを復元しました');
+                    } else {
+                        showToast('フォーマットが不正です', true);
+                    }
+                } catch (err) {
+                    showToast('ファイルの読み込みに失敗しました', true);
+                }
+            };
+            reader.readAsText(file);
+        }
+
+        // Modal Logic
+        function showConfirmModal(title, msg, callback) {
+            const modal = document.getElementById('confirmModal');
+            const box = document.getElementById('confirmModalBox');
+            document.getElementById('confirmTitle').textContent = title;
+            document.getElementById('confirmMessage').textContent = msg;
+            confirmCallback = callback;
+
+            modal.classList.remove('hidden');
+            setTimeout(() => {
+                modal.classList.remove('opacity-0');
+                box.classList.remove('scale-95');
+                box.classList.add('scale-100');
+            }, 10);
+            document.getElementById('confirmYesBtn').onclick = () => closeConfirmModal(true);
+        }
+
+        function closeConfirmModal(confirmed) {
+            const modal = document.getElementById('confirmModal');
+            const box = document.getElementById('confirmModalBox');
+
+            modal.classList.add('opacity-0');
+            box.classList.remove('scale-100');
+            box.classList.add('scale-95');
+
+            setTimeout(() => {
+                modal.classList.add('hidden');
+                if (confirmed && confirmCallback) confirmCallback();
+                confirmCallback = null;
+            }, 200);
+        }
+    </script>
+</body>
+</html>
